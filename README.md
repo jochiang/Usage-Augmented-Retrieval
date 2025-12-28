@@ -1,4 +1,4 @@
-# Knowledge Harness
+# Usage Augmented Retrieval 
 
 > **Note**: This is a proof of concept, vibe-coded with Claude. It works, but expect rough edges.
 
