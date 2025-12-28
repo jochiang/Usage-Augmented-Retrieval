@@ -6,11 +6,26 @@ A usage-augmented retrieval (UAR) system for Claude Code. Unlike traditional RAG
 
 ## Core Idea
 
+### The Problem with Traditional RAG
+
+Standard RAG is stateless. It retrieves content based on semantic similarity, but it doesn't learn from outcomes. A chunk that has consistently led you astray gets retrieved just as readily as one that has saved you dozens of times—as long as the embeddings are close enough.
+
+The result: sarcastic Reddit comments presented as factual claims, outdated Stack Overflow answers weighted equally with current documentation, and no sense of "this source is great for practical tips but terrible for authoritative statements."
+
+### What UAR Does Differently
+
 RAG asks: *"What content is semantically similar to this query?"*
 
 UAR asks: *"What content is semantically similar AND has actually helped with tasks like this before?"*
 
-The system tracks what worked, what didn't, and why—then surfaces that signal for LLM reasoning.
+Every time you retrieve and use a piece of knowledge, the system records:
+- What task were you trying to accomplish? (debugging, factual lookup, conceptual understanding, etc.)
+- Did it help, partially help, miss entirely, or actively mislead?
+- Why?
+
+This creates a usage history for each chunk. Over time, the system learns what each piece of knowledge is actually good for—not through a reliability score, but through **role-casting**: the same content might be excellent for debugging but useless for theoretical understanding.
+
+Rather than pre-computing a score that bakes in these signals, the raw usage history is surfaced directly to the LLM. It sees "this chunk won 3x for debugging, missed 2x for factual lookup" and reasons about whether to trust it for the current task. The judgment stays with the reasoning system.
 
 ## Features
 
