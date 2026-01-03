@@ -366,46 +366,57 @@ class Retriever:
         return results
     
     def _fuse_results(
-        self, 
+        self,
         strategy_results: dict[str, dict[str, float]]
     ) -> dict[str, dict]:
         """
         Combine results from multiple strategies into final rankings.
-        
+
+        Recency is treated as a tie-breaker, not a primary ranking factor.
+
         Returns: {chunk_id: {"final_score": float, "strategies": list, "scores": dict}}
         """
-        weights = {
+        # Relevance weights (recency excluded - it's a tie-breaker)
+        relevance_weights = {
             "keyword": self.config.weight_keyword,
             "semantic": self.config.weight_semantic,
             "concept": self.config.weight_concept,
             "usage": self.config.weight_usage,
-            "recency": self.config.weight_recency,
         }
-        
+        total_relevance_weight = sum(relevance_weights.values())
+
         # Collect all chunk IDs
         all_chunk_ids = set()
         for results in strategy_results.values():
             all_chunk_ids.update(results.keys())
-        
+
         # Calculate fused scores
         fused = {}
         for chunk_id in all_chunk_ids:
             scores = {}
             strategies = []
             weighted_sum = 0.0
-            weight_sum = 0.0
-            
+
             for strategy_name, results in strategy_results.items():
                 if chunk_id in results:
                     score = results[chunk_id]
                     scores[strategy_name] = score
                     strategies.append(strategy_name)
-                    weighted_sum += score * weights.get(strategy_name, 0.1)
-                    weight_sum += weights.get(strategy_name, 0.1)
-            
-            # Normalize by weights actually used
-            final_score = weighted_sum / weight_sum if weight_sum > 0 else 0
-            
+
+                    # Only include relevance strategies in the main score
+                    if strategy_name in relevance_weights:
+                        weighted_sum += score * relevance_weights[strategy_name]
+
+            # Normalize by TOTAL relevance weight, not just matched weights
+            # This means a chunk found by only one strategy scores proportionally lower
+            relevance_score = weighted_sum / total_relevance_weight if total_relevance_weight > 0 else 0
+
+            # Recency as tie-breaker: small boost (max 5%) for recent content
+            recency_score = scores.get("recency", 0)
+            recency_boost = 1.0 + (0.05 * recency_score)  # 0-5% boost based on recency
+
+            final_score = relevance_score * recency_boost
+
             # Boost/penalize based on historical usage success
             usage_stats = self.db.get_chunk_success_rate(chunk_id)
             if usage_stats["total"] >= 3:  # Only adjust if we have enough data
@@ -414,13 +425,13 @@ class Retriever:
                     final_score *= 1.2  # 20% boost
                 elif rate <= self.config.usage_penalty_threshold:
                     final_score *= 0.8  # 20% penalty
-            
+
             fused[chunk_id] = {
                 "final_score": final_score,
                 "strategies": strategies,
                 "scores": scores
             }
-        
+
         return fused
     
     @staticmethod
